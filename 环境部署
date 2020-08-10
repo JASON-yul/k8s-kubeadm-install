@@ -15,3 +15,62 @@ yum代理：echo 'proxy=http://xxxx' >> /etc/yum.conf
 为使本集群可以使用ipvs进行管理，需要加载ipvs内核模块（此步骤可选，默认为iptables管理）
 
 7.配置yum源
+8.具体插件部署
+master{1..3}安装docker、kubeadm、kubelet、kubectl
+node{1..4}安装docker、kubeadm、kubelet
+
+9.在其中一台机器上安装haproxy完成三台master机器的负载均衡部署
+vim /etc/haproxy/haproxy.cfg
+...
+#---------------------------------------------------------------------
+# common defaults that all the 'listen' and 'backend' sections will
+# use if not designated in their block
+#---------------------------------------------------------------------
+listen stats 0.0.0.0:12345
+    mode                    http
+    log                     global
+    stats enable
+    stats hide-version
+    stats refresh 30s
+    stats show-node
+    stats auth admin:p@ssw0rd
+    stats uri /stats
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+
+#---------------------------------------------------------------------
+# main frontend which proxys to the backends
+#---------------------------------------------------------------------
+frontend  kube-api-https
+    bind 0.0.0.0:12567
+    mode tcp
+    default_backend             kube-api-server
+
+#---------------------------------------------------------------------
+# static backend for serving up images, stylesheets and such
+#---------------------------------------------------------------------
+backend static
+    balance     roundrobin
+    server      static 127.0.0.1:4331 check
+
+#---------------------------------------------------------------------
+# round robin balancing between the various backends
+#---------------------------------------------------------------------
+backend kube-api-server
+    balance     roundrobin
+    mode tcp
+    server  kubenode1 10.29.180.100:6443 check
+    server  kubenode2 10.28.0.238:6443 check
+    server  kubenode3 10.29.173.229:6443 check
