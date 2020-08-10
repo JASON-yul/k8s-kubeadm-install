@@ -1,0 +1,10 @@
+/etc/kubernetes/pki/apiserver.crt                #1年有效期
+/etc/kubernetes/pki/front-proxy-ca.crt           #10年有效期
+/etc/kubernetes/pki/ca.crt                       #10年有效期
+/etc/kubernetes/pki/apiserver-etcd-client.crt    #1年有效期
+/etc/kubernetes/pki/front-proxy-client.crt       #1年有效期
+/etc/kubernetes/pki/etcd/server.crt              #1年有效期
+/etc/kubernetes/pki/etcd/ca.crt                  #10年有效期
+/etc/kubernetes/pki/etcd/peer.crt                #1年有效期
+/etc/kubernetes/pki/etcd/healthcheck-client.crt  #1年有效期
+/etc/kubernetes/pki/apiserver-kubelet-client.crt #1年有效期
