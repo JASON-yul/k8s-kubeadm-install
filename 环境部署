@@ -11,7 +11,7 @@ node1、node2、node3、node4
 docker代理：/usr/lib/systemd/system/docker.service
 yum代理：echo 'proxy=http://xxxx' >> /etc/yum.conf
 
-6.所有主机安装ipvsadm
+6.所有主机安装ipvsadm：yum -y install ipvsadm
 为使本集群可以使用ipvs进行管理，需要加载ipvs内核模块（此步骤可选，默认为iptables管理）
 
 7.配置yum源
@@ -21,56 +21,88 @@ node{1..4}安装docker、kubeadm、kubelet
 
 9.在其中一台机器上安装haproxy完成三台master机器的负载均衡部署
 vim /etc/haproxy/haproxy.cfg
-...
-#---------------------------------------------------------------------
-# common defaults that all the 'listen' and 'backend' sections will
-# use if not designated in their block
-#---------------------------------------------------------------------
-listen stats 0.0.0.0:12345
-    mode                    http
-    log                     global
-    stats enable
-    stats hide-version
-    stats refresh 30s
-    stats show-node
-    stats auth admin:p@ssw0rd
-    stats uri /stats
-    option                  httplog
-    option                  dontlognull
-    option http-server-close
-    option forwardfor       except 127.0.0.0/8
-    option                  redispatch
-    retries                 3
-    timeout http-request    10s
-    timeout queue           1m
-    timeout connect         10s
-    timeout client          1m
-    timeout server          1m
-    timeout http-keep-alive 10s
-    timeout check           10s
-    maxconn                 3000
+启动haproxy：systemctl start haproxy
+设置自启动：systemctl enable haproxy
+浏览器访问：http://HAPROXY_IP:12345/stats，查看HAproxy的状态界面，可以看到三个尚未启动的kube-api-server
 
-#---------------------------------------------------------------------
-# main frontend which proxys to the backends
-#---------------------------------------------------------------------
-frontend  kube-api-https
-    bind 0.0.0.0:12567
-    mode tcp
-    default_backend             kube-api-server
+二、安装，maste1上初始化部署
+1. 参考集群的kubeadm初始化配置：kubeadm config print init-defaults --kubeconfig ClusterConfiguration > kubeadm-config.yml
+2. 修改配置文件：
+vim kubeadm-config.yml
+apiVersion: kubeadm.k8s.io/v1beta2
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: abcdef.0123456789abcdef
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.29.180.100    #master1的ip
+  bindPort: 6443
+nodeRegistration:
+  criSocket: /var/run/dockershim.sock
+  name: k8s-test-master1    #master1的主机名
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+---
+apiServer:
+  timeoutForControlPlane: 4m0s
+apiVersion: kubeadm.k8s.io/v1beta2
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controlPlaneEndpoint: "10.169.167.245:12567"   #负载均衡的vip+端口，通常haproxy主机ip+端口
+controllerManager: {}
+dns:
+  type: CoreDNS
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+#imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers   #镜像仓库设置为国内仓库（不要用这个仓库，用国际仓库），不写默认为国际仓库
+kind: ClusterConfiguration
+kubernetesVersion: v1.15.3    #k8s版本
+networking:
+  dnsDomain: cluster.local
+  podSubnet: 10.244.0.0/16    #flannel默认网段设置
+  serviceSubnet: 10.96.0.0/12
 
-#---------------------------------------------------------------------
-# static backend for serving up images, stylesheets and such
-#---------------------------------------------------------------------
-backend static
-    balance     roundrobin
-    server      static 127.0.0.1:4331 check
+scheduler: {}
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1   #开启ipvs模式
+kind: KubeProxyConfiguration
+mode: "ipvs"
+ipvs:
+  ExcludeCIDRs: null
+  minSyncPeriod: 0s
+  scheduler: ""
+  syncPeriod: 30s
+ 
+ 3.对master1进行初始化：kubeadm init --config=kubeadm-config.yml --upload-certs | tee kubeadm-init.log
+ 记录一下内容用于后面其他master及node部署
+   (You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+You can now join any number of the control-plane node running the following command on each as root:
 
-#---------------------------------------------------------------------
-# round robin balancing between the various backends
-#---------------------------------------------------------------------
-backend kube-api-server
-    balance     roundrobin
-    mode tcp
-    server  kubenode1 10.29.180.100:6443 check
-    server  kubenode2 10.28.0.238:6443 check
-    server  kubenode3 10.29.173.229:6443 check
+  kubeadm join 7.217.15.147:12567 --token abcdef.0123456789abcdef \
+    --discovery-token-ca-cert-hash sha256:dbdc6413bf7f6a4c43fd61495ba234fc1ebe9defadbc2ce46ad4d3bca642668b \
+    --control-plane --certificate-key 918d783b89f39ab0fedbd7221b8d8d0d24c58dadc33f41651c565e3aa97d411b
+    
+Please note that the certificate-key gives access to cluster sensitive data, keep it secret!
+As a safeguard, uploaded-certs will be deleted in two hours; If necessary, you can use
+"kubeadm init phase upload-certs --upload-certs" to reload certs afterward.
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 7.217.15.147:12567 --token abcdef.0123456789abcdef \
+    --discovery-token-ca-cert-hash sha256:dbdc6413bf7f6a4c43fd61495ba234fc1ebe9defadbc2ce46ad4d3bca642668b)
+ 
+4.根据提示完成后续操作：后面master2、master3都要进行一下操作
+（1）配置kubectl：(所有机器都执行)
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+（2）配置flannel：flannel.yml文件：https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml（直接复制粘贴）
+kubectl apply -f flannel.yml
