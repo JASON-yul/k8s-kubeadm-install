@@ -106,3 +106,37 @@ cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 chown $(id -u):$(id -g) $HOME/.kube/config
 （2）配置flannel：flannel.yml文件：https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml（直接复制粘贴）
 kubectl apply -f flannel.yml
+（3）查看 节点状态：kubectl get node
+
+5.根据master1初始化结束的提示，分别在master2和master3上加入集群控制平面：
+kubeadm join 7.217.15.147:12567 --token abcdef.0123456789abcdef \
+    --discovery-token-ca-cert-hash sha256:dbdc6413bf7f6a4c43fd61495ba234fc1ebe9defadbc2ce46ad4d3bca642668b \
+    --control-plane --certificate-key 918d783b89f39ab0fedbd7221b8d8d0d24c58dadc33f41651c565e3aa97d411b
+加入集群后同样对kubectl进行配置
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+
+6.将node{1..4}节点加入集群
+kubeadm join 7.217.15.147:12567 --token abcdef.0123456789abcdef \
+    --discovery-token-ca-cert-hash sha256:dbdc6413bf7f6a4c43fd61495ba234fc1ebe9defadbc2ce46ad4d3bca642668b
+    
+7.后续工作
+（1）查看 Node
+kubectl get nodes -o wide
+（2）查看 Pod
+kubectl -n kube-system get pod -o wide（3）查看 Service
+kubectl -n kube-system get svc
+（4）验证 IPVS
+查看 kube-proxy 日志，server_others.go:176] Using ipvs Proxier.
+kubectl -n kube-system logs -f <kube-proxy 容器名>
+（5）查看代理规则
+ipvsadm -ln
+（6）查看生效的配置
+kubectl -n kube-system get cm kubeadm-config -o yaml
+（7）查看 etcd 集群
+kubectl -n kube-system exec etcd-k8s-test-master1 -- etcdctl  \
+       --endpoints=https://10.29.180.100:2379  \
+       --ca-file=/etc/kubernetes/pki/etcd/ca.crt  \
+       --cert-file=/etc/kubernetes/pki/etcd/server.crt  \
+       --key-file=/etc/kubernetes/pki/etcd/server.key cluster-health  \
