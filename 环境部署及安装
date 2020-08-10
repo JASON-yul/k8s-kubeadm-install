@@ -1,3 +1,4 @@
+参考链接：https://kubernetes.io/zh/docs/concepts/cluster-administration/manage-deployment/
 一、基础环境部署
 1.7台机器，要求所有主机在同一个网段，尽量部署静态ip
 master1、master2、master3
