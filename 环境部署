@@ -1,0 +1,17 @@
+一、基础环境部署
+1.7台机器，要求所有主机在同一个网段，尽量部署静态ip
+master1、master2、master3
+node1、node2、node3、node4
+
+2.关闭防火墙，selinux，swapoff，
+3.配置时钟同步
+4.配置集群内部主机解析：/etc/hosts
+
+5.如果是企业内部，需要配置docker和yum代理
+docker代理：/usr/lib/systemd/system/docker.service
+yum代理：echo 'proxy=http://xxxx' >> /etc/yum.conf
+
+6.所有主机安装ipvsadm
+为使本集群可以使用ipvs进行管理，需要加载ipvs内核模块（此步骤可选，默认为iptables管理）
+
+7.配置yum源
