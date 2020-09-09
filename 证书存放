@@ -1,3 +1,5 @@
+for item in `find /etc/kubernetes/pki -maxdepth 2 -name "*.crt"`;do openssl x509 -in $item -text -noout| grep Not;done
+
 /etc/kubernetes/pki/apiserver.crt                #1年有效期
 /etc/kubernetes/pki/front-proxy-ca.crt           #10年有效期
 /etc/kubernetes/pki/ca.crt                       #10年有效期
