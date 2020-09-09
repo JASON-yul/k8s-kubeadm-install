@@ -1,3 +1,4 @@
+1.查看证书有效期：
 for item in `find /etc/kubernetes/pki -maxdepth 2 -name "*.crt"`;do openssl x509 -in $item -text -noout| grep Not;done
 
 /etc/kubernetes/pki/apiserver.crt                #1年有效期
